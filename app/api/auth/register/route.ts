@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import bcrypt from "bcrypt";
 import { z } from "zod";
 import { generateToken } from "@/lib/tokens";
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
     const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     // Create user with transaction
-    const user = await prisma.$transaction(async (tx) => {
+    const user = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Create user (email not verified yet)
       const newUser = await tx.user.create({
         data: {
