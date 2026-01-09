@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcrypt";
 import { z } from "zod";
+import { generateToken } from "@/lib/tokens";
+import { sendVerificationEmail } from "@/lib/email";
 
 const registerSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -42,9 +44,13 @@ export async function POST(request: NextRequest) {
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
+    // Generate verification token
+    const verificationToken = generateToken();
+    const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
     // Create user with transaction
     const user = await prisma.$transaction(async (tx) => {
-      // Create user
+      // Create user (email not verified yet)
       const newUser = await tx.user.create({
         data: {
           email,
@@ -53,7 +59,7 @@ export async function POST(request: NextRequest) {
           name: userType === "WORKER"
             ? `${firstName} ${lastName}`.trim()
             : companyName,
-          emailVerified: new Date(), // Auto-verify for now
+          emailVerified: null, // Not verified yet
         },
       });
 
@@ -75,11 +81,28 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      // Create verification token
+      await tx.verificationToken.create({
+        data: {
+          identifier: email,
+          token: verificationToken,
+          expires: tokenExpires,
+        },
+      });
+
       return newUser;
     });
 
+    // Send verification email
+    const userName = userType === "WORKER"
+      ? `${firstName} ${lastName}`.trim()
+      : companyName;
+
+    await sendVerificationEmail(email, verificationToken, userName);
+
     return NextResponse.json({
       success: true,
+      message: "Registration successful. Please check your email to verify your account.",
       user: {
         id: user.id,
         email: user.email,

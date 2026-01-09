@@ -78,30 +78,41 @@ export function Header({ user }: HeaderProps) {
           {/* Logo */}
           <div className="flex items-center space-x-8">
             <Link href="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-sm">
                 <Briefcase className="h-5 w-5 text-primary-foreground" />
               </div>
-              <span className="font-bold text-xl">GigIt</span>
+              <span className="font-bold text-xl tracking-tight">GigIt</span>
             </Link>
 
             {/* Desktop Navigation */}
-            {user && (
-              <nav className="hidden md:flex items-center space-x-6">
-                {navItems.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`text-sm font-medium transition-colors hover:text-primary ${
-                      pathname === item.href
-                        ? "text-primary"
-                        : "text-muted-foreground"
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </nav>
-            )}
+            <nav className="hidden md:flex items-center space-x-6">
+              <Link
+                href="/jobs"
+                className={`text-sm font-medium transition-colors hover:text-primary ${
+                  pathname === "/jobs" || pathname.startsWith("/jobs/")
+                    ? "text-primary"
+                    : "text-muted-foreground"
+                }`}
+              >
+                Find Work
+              </Link>
+              {user &&
+                navItems
+                  .filter((item) => item.href !== "/jobs")
+                  .map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={`text-sm font-medium transition-colors hover:text-primary ${
+                        pathname === item.href
+                          ? "text-primary"
+                          : "text-muted-foreground"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
+            </nav>
           </div>
 
           {/* Right Side */}
@@ -197,10 +208,10 @@ export function Header({ user }: HeaderProps) {
               </>
             ) : (
               <div className="flex items-center space-x-2">
-                <Button variant="ghost" asChild>
+                <Button variant="ghost" className="rounded-full" asChild>
                   <Link href="/login">Sign in</Link>
                 </Button>
-                <Button asChild>
+                <Button className="rounded-full" asChild>
                   <Link href="/register">Get Started</Link>
                 </Button>
               </div>

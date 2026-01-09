@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { formatDistanceToNow, format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +35,7 @@ import {
   Send,
   Briefcase,
   ExternalLink,
+  LogIn,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -119,6 +121,7 @@ const companySizeLabels: Record<string, string> = {
 export default function JobDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const { data: session, status: authStatus } = useSession();
   const jobId = params.id as string;
 
   const [job, setJob] = useState<JobDetail | null>(null);
@@ -126,9 +129,12 @@ export default function JobDetailPage() {
   const [isSaved, setIsSaved] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [showApplyDialog, setShowApplyDialog] = useState(false);
+  const [showLoginDialog, setShowLoginDialog] = useState(false);
   const [coverLetter, setCoverLetter] = useState("");
   const [proposedRate, setProposedRate] = useState("");
   const [applyError, setApplyError] = useState("");
+
+  const isAuthenticated = authStatus === "authenticated";
 
   useEffect(() => {
     const fetchJob = async () => {
@@ -151,6 +157,10 @@ export default function JobDetailPage() {
   }, [jobId, router]);
 
   const handleSave = async () => {
+    if (!isAuthenticated) {
+      setShowLoginDialog(true);
+      return;
+    }
     try {
       const response = await fetch(`/api/jobs/${jobId}/save`, {
         method: "POST",
@@ -164,6 +174,10 @@ export default function JobDetailPage() {
   };
 
   const handleUnsave = async () => {
+    if (!isAuthenticated) {
+      setShowLoginDialog(true);
+      return;
+    }
     try {
       const response = await fetch(`/api/jobs/${jobId}/save`, {
         method: "DELETE",
@@ -174,6 +188,14 @@ export default function JobDetailPage() {
     } catch (error) {
       console.error("Failed to unsave job:", error);
     }
+  };
+
+  const handleApplyClick = () => {
+    if (!isAuthenticated) {
+      setShowLoginDialog(true);
+      return;
+    }
+    setShowApplyDialog(true);
   };
 
   const handleApply = async () => {
@@ -363,68 +385,77 @@ export default function JobDetailPage() {
                     </span>
                   </div>
                 ) : (
-                  <Dialog open={showApplyDialog} onOpenChange={setShowApplyDialog}>
-                    <DialogTrigger asChild>
-                      <Button size="lg">
-                        <Send className="h-4 w-4 mr-2" />
-                        Apply Now
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[500px]">
-                      <DialogHeader>
-                        <DialogTitle>Apply to {job.title}</DialogTitle>
-                        <DialogDescription>
-                          Submit your application to {job.business.companyName}
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4 pt-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="coverLetter">
-                            Cover Letter (Optional)
-                          </Label>
-                          <Textarea
-                            id="coverLetter"
-                            placeholder="Tell them why you're a great fit for this job..."
-                            value={coverLetter}
-                            onChange={(e) => setCoverLetter(e.target.value)}
-                            rows={5}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="proposedRate">
-                            Proposed Rate (Optional)
-                          </Label>
-                          <div className="relative">
-                            <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                              id="proposedRate"
-                              type="number"
-                              placeholder="Your proposed rate"
-                              value={proposedRate}
-                              onChange={(e) => setProposedRate(e.target.value)}
-                              className="pl-10"
-                            />
+                  <>
+                    {isAuthenticated ? (
+                      <Dialog open={showApplyDialog} onOpenChange={setShowApplyDialog}>
+                        <DialogTrigger asChild>
+                          <Button size="lg">
+                            <Send className="h-4 w-4 mr-2" />
+                            Apply Now
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[500px]">
+                          <DialogHeader>
+                            <DialogTitle>Apply to {job.title}</DialogTitle>
+                            <DialogDescription>
+                              Submit your application to {job.business.companyName}
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="space-y-4 pt-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="coverLetter">
+                                Cover Letter (Optional)
+                              </Label>
+                              <Textarea
+                                id="coverLetter"
+                                placeholder="Tell them why you're a great fit for this job..."
+                                value={coverLetter}
+                                onChange={(e) => setCoverLetter(e.target.value)}
+                                rows={5}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="proposedRate">
+                                Proposed Rate (Optional)
+                              </Label>
+                              <div className="relative">
+                                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                  id="proposedRate"
+                                  type="number"
+                                  placeholder="Your proposed rate"
+                                  value={proposedRate}
+                                  onChange={(e) => setProposedRate(e.target.value)}
+                                  className="pl-10"
+                                />
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                Budget: {formatBudget()} {paymentTypeLabels[job.paymentType]}
+                              </p>
+                            </div>
+                            {applyError && (
+                              <p className="text-sm text-destructive">{applyError}</p>
+                            )}
+                            <Button
+                              className="w-full"
+                              onClick={handleApply}
+                              disabled={isApplying}
+                            >
+                              {isApplying && (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              )}
+                              Submit Application
+                            </Button>
                           </div>
-                          <p className="text-xs text-muted-foreground">
-                            Budget: {formatBudget()} {paymentTypeLabels[job.paymentType]}
-                          </p>
-                        </div>
-                        {applyError && (
-                          <p className="text-sm text-destructive">{applyError}</p>
-                        )}
-                        <Button
-                          className="w-full"
-                          onClick={handleApply}
-                          disabled={isApplying}
-                        >
-                          {isApplying && (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          )}
-                          Submit Application
-                        </Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
+                        </DialogContent>
+                      </Dialog>
+                    ) : (
+                      <Button size="lg" onClick={handleApplyClick}>
+                        <LogIn className="h-4 w-4 mr-2" />
+                        Sign in to Apply
+                      </Button>
+                    )}
+                  </>
                 )}
                 <Button
                   variant="outline"
@@ -439,7 +470,7 @@ export default function JobDetailPage() {
                   ) : (
                     <>
                       <Bookmark className="h-4 w-4 mr-2" />
-                      Save Job
+                      {isAuthenticated ? "Save Job" : "Sign in to Save"}
                     </>
                   )}
                 </Button>
@@ -598,6 +629,27 @@ export default function JobDetailPage() {
           </Card>
         </div>
       </div>
+
+      {/* Login Dialog */}
+      <Dialog open={showLoginDialog} onOpenChange={setShowLoginDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Sign in required</DialogTitle>
+            <DialogDescription>
+              You need to sign in to apply for jobs. Create a free account to start
+              applying to opportunities.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 justify-end mt-4">
+            <Button variant="outline" onClick={() => setShowLoginDialog(false)}>
+              Cancel
+            </Button>
+            <Button asChild>
+              <Link href={`/login?callbackUrl=/jobs/${jobId}`}>Sign in</Link>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -2,11 +2,20 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { JobCard } from "@/components/jobs/job-card";
 import { JobFilters } from "@/components/jobs/job-filters";
 import { Search, Loader2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import Link from "next/link";
 
 interface Job {
   id: string;
@@ -45,12 +54,14 @@ interface Skill {
 export default function JobsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { data: session, status } = useSession();
 
   const [jobs, setJobs] = useState<Job[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [savedJobIds, setSavedJobIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [searchInput, setSearchInput] = useState(searchParams.get("search") || "");
+  const [showLoginDialog, setShowLoginDialog] = useState(false);
   const [pagination, setPagination] = useState({
     page: 1,
     limit: 10,
@@ -88,9 +99,10 @@ export default function JobsPage() {
     fetchSkills();
   }, []);
 
-  // Fetch saved jobs
+  // Fetch saved jobs only if authenticated
   useEffect(() => {
     const fetchSavedJobs = async () => {
+      if (status !== "authenticated") return;
       try {
         const response = await fetch("/api/workers/saved-jobs");
         if (response.ok) {
@@ -98,11 +110,11 @@ export default function JobsPage() {
           setSavedJobIds(new Set(data.map((sj: any) => sj.jobPostId)));
         }
       } catch (error) {
-        // User might not be logged in
+        // User might not have a worker profile
       }
     };
     fetchSavedJobs();
-  }, []);
+  }, [status]);
 
   // Fetch jobs when filters change
   const fetchJobs = useCallback(async () => {
@@ -173,6 +185,10 @@ export default function JobsPage() {
   };
 
   const handleSaveJob = async (jobId: string) => {
+    if (status !== "authenticated") {
+      setShowLoginDialog(true);
+      return;
+    }
     try {
       const response = await fetch(`/api/jobs/${jobId}/save`, {
         method: "POST",
@@ -186,6 +202,10 @@ export default function JobsPage() {
   };
 
   const handleUnsaveJob = async (jobId: string) => {
+    if (status !== "authenticated") {
+      setShowLoginDialog(true);
+      return;
+    }
     try {
       const response = await fetch(`/api/jobs/${jobId}/save`, {
         method: "DELETE",
@@ -327,6 +347,27 @@ export default function JobsPage() {
           )}
         </div>
       </div>
+
+      {/* Login Dialog */}
+      <Dialog open={showLoginDialog} onOpenChange={setShowLoginDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Sign in required</DialogTitle>
+            <DialogDescription>
+              You need to sign in to save jobs. Create a free account to save jobs
+              and apply to opportunities.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2 justify-end mt-4">
+            <Button variant="outline" onClick={() => setShowLoginDialog(false)}>
+              Cancel
+            </Button>
+            <Button asChild>
+              <Link href="/login?callbackUrl=/jobs">Sign in</Link>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
