@@ -1,0 +1,623 @@
+// This is your Prisma schema file for the B2B Gig Platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum UserType {
+  WORKER
+  BUSINESS
+  ADMIN
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  BUSY
+  NOT_AVAILABLE
+}
+
+enum ProficiencyLevel {
+  BEGINNER
+  INTERMEDIATE
+  EXPERT
+}
+
+enum CompanySize {
+  SMALL       // 1-50 employees
+  MEDIUM      // 51-200 employees
+  LARGE       // 201-1000 employees
+  ENTERPRISE  // 1000+ employees
+}
+
+enum JobType {
+  INDIVIDUAL
+  BULK
+}
+
+enum PaymentType {
+  HOURLY
+  FIXED
+  DAILY
+}
+
+enum LocationType {
+  ON_SITE
+  REMOTE
+  HYBRID
+}
+
+enum JobStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+  CANCELLED
+}
+
+enum JobUrgency {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ApplicationStatus {
+  PENDING
+  REVIEWED
+  SHORTLISTED
+  REJECTED
+  ACCEPTED
+  WITHDRAWN
+}
+
+enum ContractType {
+  INDIVIDUAL
+  BULK_MEMBER
+}
+
+enum ContractStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum NotificationType {
+  JOB_APPLICATION
+  JOB_ACCEPTED
+  JOB_REJECTED
+  PAYMENT_RECEIVED
+  PAYMENT_SENT
+  MESSAGE
+  REVIEW_RECEIVED
+  CONTRACT_CREATED
+  CONTRACT_COMPLETED
+  WORKER_HIRED
+  SYSTEM
+}
+
+// Models
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String?   @map("password_hash") // Nullable for OAuth users
+  name          String?
+  image         String?
+  userType      UserType? @map("user_type")
+  emailVerified DateTime? @map("email_verified")
+  onboardingCompleted Boolean @default(false) @map("onboarding_completed")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  lastLogin     DateTime? @map("last_login")
+
+  // NextAuth Relations
+  accounts      Account[]
+  sessions      Session[]
+
+  // App Relations
+  workerProfile   WorkerProfile?
+  businessProfile BusinessProfile?
+  sentMessages    Message[]        @relation("SentMessages")
+  conversations   ConversationParticipant[]
+  notifications   Notification[]
+  reviewsGiven    Review[]         @relation("ReviewsGiven")
+  reviewsReceived Review[]         @relation("ReviewsReceived")
+
+  @@map("users")
+}
+
+// NextAuth Models
+model Account {
+  id                String  @id @default(uuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model WorkerProfile {
+  id                 String             @id @default(uuid())
+  userId             String             @unique @map("user_id")
+  firstName          String             @map("first_name")
+  lastName           String             @map("last_name")
+  phone              String?
+  dateOfBirth        DateTime?          @map("date_of_birth") @db.Date
+  profilePicture     String?            @map("profile_picture")
+  bio                String?            @db.Text
+  headline           String?            // Professional headline
+  resumeUrl          String?            @map("resume_url") // URL to resume in R2
+  linkedinUrl        String?            @map("linkedin_url")
+  linkedinData       Json?              @map("linkedin_data") // Stored LinkedIn profile data
+  yearsOfExperience  Int?               @map("years_of_experience")
+  hourlyRate         Decimal?           @map("hourly_rate") @db.Decimal(10, 2)
+  dailyRate          Decimal?           @map("daily_rate") @db.Decimal(10, 2)
+  availabilityStatus AvailabilityStatus @default(AVAILABLE) @map("availability_status")
+  willingToRelocate  Boolean            @default(false) @map("willing_to_relocate")
+  willingToTravel    Boolean            @default(false) @map("willing_to_travel")
+  locationCity       String?            @map("location_city")
+  locationState      String?            @map("location_state")
+  locationCountry    String?            @map("location_country")
+  locationZipCode    String?            @map("location_zip_code")
+  latitude           Decimal?           @db.Decimal(10, 8)
+  longitude          Decimal?           @db.Decimal(11, 8)
+  verificationStatus VerificationStatus @default(PENDING) @map("verification_status")
+  ratingAverage      Decimal?           @default(0) @map("rating_average") @db.Decimal(3, 2)
+  totalJobsCompleted Int                @default(0) @map("total_jobs_completed")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skills           WorkerSkill[]
+  certifications   Certification[]
+  licenses         License[]
+  portfolioItems   PortfolioItem[]
+  workExperiences  WorkExperience[]
+  educations       Education[]
+  languages        WorkerLanguage[]
+  jobApplications  JobApplication[]
+  contracts        Contract[]
+  savedJobs        SavedJob[]
+
+  @@index([locationCity, locationState])
+  @@index([verificationStatus])
+  @@index([availabilityStatus])
+  @@map("worker_profiles")
+}
+
+model WorkExperience {
+  id          String    @id @default(uuid())
+  workerId    String    @map("worker_id")
+  title       String
+  company     String
+  location    String?
+  startDate   DateTime  @map("start_date") @db.Date
+  endDate     DateTime? @map("end_date") @db.Date
+  isCurrent   Boolean   @default(false) @map("is_current")
+  description String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  worker WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@index([workerId])
+  @@map("work_experiences")
+}
+
+model Education {
+  id           String    @id @default(uuid())
+  workerId     String    @map("worker_id")
+  institution  String
+  degree       String?
+  fieldOfStudy String?   @map("field_of_study")
+  startDate    DateTime? @map("start_date") @db.Date
+  endDate      DateTime? @map("end_date") @db.Date
+  description  String?   @db.Text
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  worker WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@index([workerId])
+  @@map("educations")
+}
+
+model License {
+  id                   String             @id @default(uuid())
+  workerId             String             @map("worker_id")
+  name                 String
+  issuingAuthority     String             @map("issuing_authority")
+  licenseNumber        String?            @map("license_number")
+  issueDate            DateTime?          @map("issue_date") @db.Date
+  expiryDate           DateTime?          @map("expiry_date") @db.Date
+  state                String?
+  documentUrl          String?            @map("document_url")
+  verificationStatus   VerificationStatus @default(PENDING) @map("verification_status")
+  createdAt            DateTime           @default(now()) @map("created_at")
+
+  worker WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@index([workerId])
+  @@map("licenses")
+}
+
+model Language {
+  id        String           @id @default(uuid())
+  name      String           @unique
+  code      String?          @unique // e.g., 'en', 'es', 'fr'
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  workers WorkerLanguage[]
+
+  @@map("languages")
+}
+
+model WorkerLanguage {
+  id          String @id @default(uuid())
+  workerId    String @map("worker_id")
+  languageId  String @map("language_id")
+  proficiency String // BASIC, CONVERSATIONAL, FLUENT, NATIVE
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  worker   WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  language Language      @relation(fields: [languageId], references: [id], onDelete: Cascade)
+
+  @@unique([workerId, languageId])
+  @@index([languageId])
+  @@map("worker_languages")
+}
+
+model Skill {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  category  String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  workers WorkerSkill[]
+
+  @@index([category])
+  @@map("skills")
+}
+
+model WorkerSkill {
+  id                 String           @id @default(uuid())
+  workerId           String           @map("worker_id")
+  skillId            String           @map("skill_id")
+  proficiencyLevel   ProficiencyLevel @map("proficiency_level")
+  yearsOfExperience  Int?             @map("years_of_experience")
+  createdAt          DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  worker WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  skill  Skill         @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([workerId, skillId])
+  @@index([skillId])
+  @@map("worker_skills")
+}
+
+model Certification {
+  id                   String             @id @default(uuid())
+  workerId             String             @map("worker_id")
+  name                 String
+  issuingOrganization  String             @map("issuing_organization")
+  issueDate            DateTime           @map("issue_date") @db.Date
+  expiryDate           DateTime?          @map("expiry_date") @db.Date
+  certificateUrl       String?            @map("certificate_url")
+  verificationStatus   VerificationStatus @default(PENDING) @map("verification_status")
+  createdAt            DateTime           @default(now()) @map("created_at")
+
+  // Relations
+  worker WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@index([workerId])
+  @@map("certifications")
+}
+
+model PortfolioItem {
+  id          String   @id @default(uuid())
+  workerId    String   @map("worker_id")
+  title       String
+  description String?  @db.Text
+  projectDate DateTime @map("project_date") @db.Date
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // Relations
+  worker WorkerProfile    @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  images PortfolioImage[]
+
+  @@index([workerId])
+  @@map("portfolio_items")
+}
+
+model PortfolioImage {
+  id              String   @id @default(uuid())
+  portfolioItemId String   @map("portfolio_item_id")
+  imageUrl        String   @map("image_url")
+  displayOrder    Int      @map("display_order")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  portfolioItem PortfolioItem @relation(fields: [portfolioItemId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioItemId])
+  @@map("portfolio_images")
+}
+
+model BusinessProfile {
+  id                        String             @id @default(uuid())
+  userId                    String             @unique @map("user_id")
+  companyName               String             @map("company_name")
+  companyRegistrationNumber String?            @unique @map("company_registration_number")
+  phone                     String?
+  industry                  String?
+  companySize               CompanySize?       @map("company_size")
+  website                   String?
+  logoUrl                   String?            @map("logo_url")
+  description               String?            @db.Text
+  locationCity              String?            @map("location_city")
+  locationState             String?            @map("location_state")
+  locationCountry           String?            @map("location_country")
+  verificationStatus        VerificationStatus @default(PENDING) @map("verification_status")
+  createdAt                 DateTime           @default(now()) @map("created_at")
+  updatedAt                 DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobPosts  JobPost[]
+  contracts Contract[]
+
+  @@index([verificationStatus])
+  @@map("business_profiles")
+}
+
+model JobPost {
+  id                    String       @id @default(uuid())
+  businessId            String       @map("business_id")
+  title                 String
+  description           String       @db.Text
+  requiredSkills        Json         @map("required_skills") // Array of skill IDs
+  jobType               JobType      @map("job_type")
+  numberOfWorkersNeeded Int          @default(1) @map("number_of_workers_needed")
+  budgetMin             Decimal?     @map("budget_min") @db.Decimal(10, 2)
+  budgetMax             Decimal?     @map("budget_max") @db.Decimal(10, 2)
+  paymentType           PaymentType  @map("payment_type")
+  locationType          LocationType @map("location_type")
+  jobLocationCity       String?      @map("job_location_city")
+  jobLocationState      String?      @map("job_location_state")
+  startDate             DateTime?    @map("start_date") @db.Date
+  endDate               DateTime?    @map("end_date") @db.Date
+  durationDays          Int?         @map("duration_days")
+  status                JobStatus    @default(DRAFT)
+  urgency               JobUrgency   @default(MEDIUM)
+  createdAt             DateTime     @default(now()) @map("created_at")
+  updatedAt             DateTime     @updatedAt @map("updated_at")
+  publishedAt           DateTime?    @map("published_at")
+  expiresAt             DateTime?    @map("expires_at")
+
+  // Relations
+  business       BusinessProfile  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  applications   JobApplication[]
+  contracts      Contract[]
+  savedByWorkers SavedJob[]
+
+  @@index([businessId])
+  @@index([status])
+  @@index([jobType])
+  @@index([publishedAt])
+  @@map("job_posts")
+}
+
+model JobApplication {
+  id           String            @id @default(uuid())
+  jobPostId    String            @map("job_post_id")
+  workerId     String            @map("worker_id")
+  coverLetter  String?           @db.Text @map("cover_letter")
+  proposedRate Decimal?          @map("proposed_rate") @db.Decimal(10, 2)
+  status       ApplicationStatus @default(PENDING)
+  appliedAt    DateTime          @default(now()) @map("applied_at")
+  reviewedAt   DateTime?         @map("reviewed_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+
+  // Relations
+  jobPost JobPost       @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
+  worker  WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@unique([jobPostId, workerId])
+  @@index([workerId])
+  @@index([status])
+  @@map("job_applications")
+}
+
+model Contract {
+  id           String         @id @default(uuid())
+  jobPostId    String         @map("job_post_id")
+  workerId     String         @map("worker_id")
+  businessId   String         @map("business_id")
+  contractType ContractType   @map("contract_type")
+  startDate    DateTime       @map("start_date") @db.Date
+  endDate      DateTime?      @map("end_date") @db.Date
+  agreedRate   Decimal        @map("agreed_rate") @db.Decimal(10, 2)
+  paymentTerms String?        @db.Text @map("payment_terms")
+  status       ContractStatus @default(ACTIVE)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  completedAt  DateTime?      @map("completed_at")
+
+  // Relations
+  jobPost  JobPost         @relation(fields: [jobPostId], references: [id])
+  worker   WorkerProfile   @relation(fields: [workerId], references: [id])
+  business BusinessProfile @relation(fields: [businessId], references: [id])
+  payments Payment[]
+  reviews  Review[]
+
+  @@index([workerId])
+  @@index([businessId])
+  @@index([status])
+  @@map("contracts")
+}
+
+model Payment {
+  id                    String        @id @default(uuid())
+  contractId            String        @map("contract_id")
+  amount                Decimal       @db.Decimal(10, 2)
+  currency              String        @default("USD")
+  paymentMethod         String?       @map("payment_method")
+  stripePaymentIntentId String?       @map("stripe_payment_intent_id")
+  status                PaymentStatus @default(PENDING)
+  paidAt                DateTime?     @map("paid_at")
+  createdAt             DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  contract Contract @relation(fields: [contractId], references: [id])
+
+  @@index([contractId])
+  @@index([status])
+  @@map("payments")
+}
+
+model Review {
+  id           String   @id @default(uuid())
+  contractId   String   @map("contract_id")
+  reviewerId   String   @map("reviewer_id")
+  revieweeId   String   @map("reviewee_id")
+  reviewerType UserType @map("reviewer_type")
+  rating       Int // 1-5 stars
+  comment      String?  @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // Relations
+  contract Contract @relation(fields: [contractId], references: [id])
+  reviewer User     @relation("ReviewsGiven", fields: [reviewerId], references: [id])
+  reviewee User     @relation("ReviewsReceived", fields: [revieweeId], references: [id])
+
+  @@unique([contractId, reviewerId])
+  @@index([revieweeId])
+  @@map("reviews")
+}
+
+model Conversation {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  userId         String   @map("user_id")
+  joinedAt       DateTime @default(now()) @map("joined_at")
+
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  senderId       String   @map("sender_id")
+  content        String   @db.Text
+  isRead         Boolean  @default(false) @map("is_read")
+  sentAt         DateTime @default(now()) @map("sent_at")
+
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@map("messages")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  type      NotificationType
+  title     String
+  message   String           @db.Text
+  link      String?
+  isRead    Boolean          @default(false) @map("is_read")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@map("notifications")
+}
+
+model SavedJob {
+  id        String   @id @default(uuid())
+  workerId  String   @map("worker_id")
+  jobPostId String   @map("job_post_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  worker  WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  jobPost JobPost       @relation(fields: [jobPostId], references: [id], onDelete: Cascade)
+
+  @@unique([workerId, jobPostId])
+  @@index([workerId])
+  @@map("saved_jobs")
+}
